@@ -15,6 +15,7 @@ type Table interface {
 }
 type IDB interface {
 	DB(ctx context.Context) *gorm.DB
+	IsTxCtx(ctx context.Context) bool
 }
 type MyDB struct {
 	db *gorm.DB
@@ -25,6 +26,13 @@ func (m *MyDB) DB(ctx context.Context) *gorm.DB {
 		return tx
 	}
 	return m.db.WithContext(ctx)
+}
+
+func (m *MyDB) IsTxCtx(ctx context.Context) bool {
+	if _, ok := ctx.Value(txContextKey{}).(*gorm.DB); ok {
+		return ok
+	}
+	return false
 }
 
 type IBaseStore[T any] interface {
@@ -207,10 +215,10 @@ func (b *baseStore[T]) ListPage(ctx context.Context, sql string, pageNum, pageSi
 	return list, int(count), nil
 }
 
-//Transaction 执行事务
+// Transaction 执行事务
 func (b *baseStore[T]) Transaction(ctx context.Context, f func(context.Context) error) error {
 	return b.DB(ctx).Transaction(func(tx *gorm.DB) error {
-		ctx = context.WithValue(ctx, txContextKey{}, tx)
-		return f(ctx)
+		txCtx := context.WithValue(ctx, txContextKey{}, tx)
+		return f(txCtx)
 	})
 }
